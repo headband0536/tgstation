@@ -282,8 +282,12 @@
 		owner.balloon_alert(user, "can't do it right now!")
 		return FALSE
 
-	if(!cuffed.IsReachableBy(user) && (user == owner || !owner.IsReachableBy(user)))
+	if(!cuffed.IsReachableBy(user))
 		owner.balloon_alert(user, "can't reach [cuffed]!")
+		return FALSE
+
+	if(!owner.IsReachableBy(user))
+		owner.balloon_alert(user, "can't reach [owner]!")
 		return FALSE
 
 	if(user == owner)
