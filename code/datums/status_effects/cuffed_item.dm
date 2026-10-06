@@ -419,7 +419,7 @@
 		movable_parent.Move(old_loc, get_dir(movable_parent, old_loc), source.glide_size)
 	update_beam()
 
-/// Draws the chain between the outermost visible holders of both ends, hiding it while they share a holder
+/// Draws the chain between the outermost holders of both ends, hiding it while they share a holder
 /datum/component/chained_together/proc/update_beam(...)
 	SIGNAL_HANDLER
 
@@ -439,7 +439,7 @@
 /// Returns the atom on a turf that holds the passed end of the chain, or null if the chain should not be drawn to it
 /datum/component/chained_together/proc/get_beam_anchor(atom/movable/chain_end)
 	var/atom/movable/anchor = get_atom_on_turf(chain_end)
-	if(QDELETED(anchor) || !isturf(anchor.loc) || anchor.invisibility > SEE_INVISIBLE_LIVING)
+	if(QDELETED(anchor) || !isturf(anchor.loc))
 		return null
 	return anchor
 
