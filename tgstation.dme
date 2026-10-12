@@ -3104,6 +3104,7 @@
 #include "code\game\objects\items\weaponry\melee\misc.dm"
 #include "code\game\objects\items\weaponry\melee\powerfist.dm"
 #include "code\game\objects\items\weaponry\melee\sabre.dm"
+#include "code\game\objects\items\weaponry\melee\sledgehammer.dm"
 #include "code\game\objects\items\weaponry\melee\soulscythe.dm"
 #include "code\game\objects\items\weaponry\melee\spear.dm"
 #include "code\game\objects\items\weaponry\melee\supermatter_sword.dm"

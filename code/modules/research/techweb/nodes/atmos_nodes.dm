@@ -97,6 +97,7 @@
 		/datum/design/handdrill,
 		/datum/design/exwelder,
 		/datum/design/jawsoflife,
+		/datum/design/engineering_sledgehammer,
 		/datum/design/rangedanalyzer,
 		/datum/design/rtd_loaded,
 		/datum/design/mech_rcd,
