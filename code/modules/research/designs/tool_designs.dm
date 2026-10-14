@@ -35,6 +35,17 @@
 	)
 	departmental_flags = DEPARTMENT_BITFLAG_ENGINEERING
 
+/datum/design/engineering_sledgehammer
+	name = "Breaching Sledgehammer"
+	desc = "A demolition sledgehammer with a forcible entry claw. Forces open airlocks, powered or not."
+	build_path = /obj/item/sledgehammer/engineering
+	build_type = PROTOLATHE | AWAY_LATHE
+	materials = /obj/item/sledgehammer/engineering::custom_materials
+	category = list(
+		RND_CATEGORY_TOOLS + RND_SUBCATEGORY_TOOLS_ENGINEERING_ADVANCED
+	)
+	departmental_flags = DEPARTMENT_BITFLAG_ENGINEERING
+
 /datum/design/exwelder
 	name = "Experimental Welding Tool"
 	desc = "An experimental welder capable of self-fuel generation."

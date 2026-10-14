@@ -277,3 +277,53 @@
 		return FALSE
 	INVOKE_ASYNC(hammer, TYPE_PROC_REF(/obj/item/sledgehammer, wind_up_throw), owner)
 	return TRUE
+
+/obj/item/sledgehammer/engineering
+	name = "breaching sledgehammer"
+	desc = "A demolition sledgehammer with a pick and a forked claw welded on, the kind firefighters call \"the irons\". Drive the claw into an airlock seam, put your weight behind it, and the airlock gives, powered or not."
+	base_icon_state = "breaching_sledgehammer"
+	icon_state = "breaching_sledgehammer0"
+	worn_icon_state = "breaching_sledgehammer"
+	actions_types = null
+	usesound = 'sound/items/tools/jaws_pry.ogg'
+	custom_materials = list(
+		/datum/material/iron = SHEET_MATERIAL_AMOUNT * 5,
+		/datum/material/silver = SHEET_MATERIAL_AMOUNT * 1.5,
+		/datum/material/titanium = SHEET_MATERIAL_AMOUNT * 2.5,
+	)
+	var/static/list/forceable_door_types = typecacheof(list(
+		/obj/machinery/door/airlock,
+		/obj/machinery/door/firedoor,
+		/obj/machinery/door/window,
+	))
+
+/obj/item/sledgehammer/engineering/Initialize(mapload)
+	. = ..()
+	AddElement(/datum/element/cuffable_item)
+	RegisterSignal(src, COMSIG_ITEM_INTERACTING_WITH_ATOM, PROC_REF(on_interacting_with_atom))
+
+/obj/item/sledgehammer/engineering/add_deep_lore()
+	AddElement(/datum/element/examine_lore, \
+		lore = "Engineering asked for something that opens an airlock when the power is out, the access is wrong \
+		and the jaws of life are on the other side of the fire.<br>\
+		<br>\
+		R&D welded a forcible entry bar onto a standard demolition hammer and called it a day. \
+		The jaws of life are a precision instrument. This is not.<br>\
+		<br>\
+		It ships with a two-page guide on authorized use. The first page has never been read. \
+		The second page is blank." \
+	)
+
+/obj/item/sledgehammer/engineering/examine(mob/user)
+	. = ..()
+	. += span_notice("Wield it and use it on an airlock outside of combat mode to force it open.")
+
+/// Signal on ourselves, because doors grab the item in their own item_interaction before interact_with_atom gets a word in
+/obj/item/sledgehammer/engineering/proc/on_interacting_with_atom(datum/source, mob/living/user, atom/target, list/modifiers)
+	SIGNAL_HANDLER
+
+	if(user.combat_mode || !is_type_in_typecache(target, forceable_door_types) || !HAS_TRAIT(src, TRAIT_WIELDED))
+		return NONE
+	var/obj/machinery/door/door = target
+	INVOKE_ASYNC(door, TYPE_PROC_REF(/obj/machinery/door, try_to_crowbar), src, user, TRUE)
+	return ITEM_INTERACT_SUCCESS
