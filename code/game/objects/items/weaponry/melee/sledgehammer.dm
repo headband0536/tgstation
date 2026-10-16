@@ -22,17 +22,23 @@
 	attack_verb_simple = list("smash", "slam", "bash", "pound")
 	custom_materials = list(/datum/material/iron = SHEET_MATERIAL_AMOUNT * 5)
 	action_slots = ITEM_SLOT_HANDS
-	actions_types = list(/datum/action/item_action/hammer_throw)
+	actions_types = list(/datum/action/cooldown/hammer_throw)
 	var/force_wielded = 20
 	var/structure_demolition_multiplier = 2 //yeah its realy for deconstruction works
-	var/list/spin_step_delays = list(
-		0.4 SECONDS, 0.4 SECONDS, 0.3 SECONDS, 0.3 SECONDS,
-		0.3 SECONDS, 0.2 SECONDS, 0.2 SECONDS, 0.2 SECONDS,
-		0.1 SECONDS, 0.1 SECONDS, 0.1 SECONDS,
-	)
+	/// Quarter turns before the hammer is fast enough to let go
+	var/spin_up_turns = 11 // ends a quarter short of the aim, follow through does the rest
+	/// How long the first, slowest quarter turn takes
+	var/first_turn_delay = 0.4 SECONDS
+	/// How much faster each next quarter turn gets
+	var/turn_delay_drop = 0.03 SECONDS
+	/// Quarter turn time at full speed, extra turns to line up the aim go at this pace
+	var/top_speed_turn_delay = 0.1 SECONDS
+	/// Extra turns allowed to line up the aim before the hammer just goes
+	var/max_lineup_turns = 4 // one full circle, orbiting the mark can't spin forever
+	/// Stamina and dizziness multiplier for turns made while walking
+	var/walking_spin_penalty = 1.5
 	var/follow_through_delay = 0.15 SECONDS
 	var/spin_facing
-	var/spin_timer
 	var/spun_throw_in_flight = FALSE
 	var/throwforce_before_spin
 	var/spun_throwforce = 25
@@ -85,6 +91,8 @@
 	. = ..()
 	if(.)
 		return .
+	if(spin_facing) // both hands are busy spinning
+		return TRUE
 	if(isliving(target))
 		play_heavy_hitsound(target, user, attack_modifiers)
 		return FALSE
@@ -173,30 +181,61 @@
 		span_hear("You hear a wall come crashing down!"),
 	)
 
-/obj/item/sledgehammer/proc/wind_up_throw(mob/living/user)
+/obj/item/sledgehammer/proc/wind_up_throw(mob/living/user, turf/aim_turf)
 	if(spin_facing)
 		return
-	var/throw_direction = user.dir
 	var/spin_turn_angle = IS_RIGHT_INDEX(user.get_held_index_of_item(src)) ? -90 : 90 // hammer trails, body drags it around
-	spin_facing = throw_direction
+	var/aim_facing = facing_toward(user, aim_turf, user.dir)
+	spin_facing = aim_facing
+	user.setDir(spin_facing)
 	RegisterSignal(user, COMSIG_ATOM_PRE_DIR_CHANGE, PROC_REF(hold_spin_facing)) // so player can't 'break' spin 'anim'
 	user.visible_message(
 		span_warning("[user] starts spinning around with [src]!"),
 		span_notice("You start spinning with [src]. Keep it up and let it fly."),
 	)
-	spin_timer = addtimer(CALLBACK(src, PROC_REF(spin_step), user, spin_turn_angle, 1), spin_step_delays[1], TIMER_STOPPABLE)
-	var/total_spin_time = 0
-	for(var/step_delay in spin_step_delays)
-		total_spin_time += step_delay
-	var/spun_up = do_after(user, total_spin_time, user, timed_action_flags = IGNORE_SLOWDOWNS, extra_checks = CALLBACK(src, PROC_REF(is_wielded)))
+	var/turns_done = 0
+	var/built_dizziness = 0
+	var/turf/last_turn_turf = get_turf(user)
+	var/datum/callback/still_wielded = CALLBACK(src, PROC_REF(is_wielded))
+	while(turns_done < spin_up_turns || (spin_facing != turn(aim_facing, -spin_turn_angle) && turns_done < spin_up_turns + max_lineup_turns)) // walked off the line, spin on until the aim lines up again
+		if(!do_after(user, turn_delay(turns_done + 1), user, timed_action_flags = IGNORE_SLOWDOWNS|IGNORE_USER_LOC_CHANGE, show_progress = FALSE, extra_checks = still_wielded))
+			stop_spin(user)
+			user.balloon_alert(user, "lost momentum!")
+			return
+		turns_done += 1
+		var/turf/turn_turf = get_turf(user)
+		var/turn_cost_multiplier = turn_turf == last_turn_turf ? 1 : walking_spin_penalty
+		last_turn_turf = turn_turf
+		spin_facing = turn(spin_facing, spin_turn_angle)
+		user.setDir(spin_facing)
+		user.adjust_stamina_loss(spin_stamina_cost / spin_up_turns * turn_cost_multiplier)
+		built_dizziness += spin_dizziness / spin_up_turns * turn_cost_multiplier
+		playsound(user, 'sound/items/weapons/thudswoosh.ogg', 20 + min(turns_done, spin_up_turns) * 3, TRUE)
+		aim_facing = facing_toward(user, aim_turf, aim_facing)
+	stop_spin(user)
+	release_throw(user, aim_turf, aim_facing, built_dizziness)
+
+/// Quarter turns speed up linearly until they hit top speed
+/obj/item/sledgehammer/proc/turn_delay(turn_number)
+	return max(top_speed_turn_delay, first_turn_delay - (turn_number - 1) * turn_delay_drop)
+
+/// Cardinal facing toward the aim, mob sprites have no diagonals
+/obj/item/sledgehammer/proc/facing_toward(mob/living/user, turf/aim_turf, current_facing)
+	if(standing_on_mark(user, aim_turf))
+		return current_facing
+	var/x_offset = aim_turf.x - user.x
+	var/y_offset = aim_turf.y - user.y
+	if(abs(x_offset) >= abs(y_offset))
+		return x_offset > 0 ? EAST : WEST
+	return y_offset > 0 ? NORTH : SOUTH
+
+/// Same x and y as the aim, z ignored so stairs mid-spin don't fling it east
+/obj/item/sledgehammer/proc/standing_on_mark(mob/living/user, turf/aim_turf)
+	return user.x == aim_turf.x && user.y == aim_turf.y
+
+/obj/item/sledgehammer/proc/stop_spin(mob/living/user)
 	spin_facing = null
 	UnregisterSignal(user, COMSIG_ATOM_PRE_DIR_CHANGE)
-	deltimer(spin_timer)
-	spin_timer = null
-	if(!spun_up)
-		user.balloon_alert(user, "lost momentum!")
-		return
-	release_throw(user, throw_direction, spin_turn_angle)
 
 /obj/item/sledgehammer/proc/is_wielded()
 	return HAS_TRAIT(src, TRAIT_WIELDED)
@@ -208,35 +247,27 @@
 		return COMPONENT_ATOM_BLOCK_DIR_CHANGE
 	return NONE
 
-/obj/item/sledgehammer/proc/spin_step(mob/living/user, spin_turn_angle, step_index)
-	if(QDELETED(user))
-		return
-	spin_facing = turn(spin_facing, spin_turn_angle)
-	user.setDir(spin_facing)
-	user.adjust_stamina_loss(spin_stamina_cost / length(spin_step_delays))
-	playsound(user, 'sound/items/weapons/thudswoosh.ogg', 20 + step_index * 3, TRUE)
-	if(step_index < length(spin_step_delays))
-		spin_timer = addtimer(CALLBACK(src, PROC_REF(spin_step), user, spin_turn_angle, step_index + 1), spin_step_delays[step_index + 1], TIMER_STOPPABLE)
-
-/obj/item/sledgehammer/proc/release_throw(mob/living/user, throw_direction, spin_turn_angle)
+/obj/item/sledgehammer/proc/release_throw(mob/living/user, turf/aim_turf, aim_facing, built_dizziness)
 	var/datum/component/two_handed/grip = GetComponent(/datum/component/two_handed)
 	grip.unwield(user, show_message = FALSE)
 	if(!user.dropItemToGround(src, silent = TRUE))
 		return
-	var/release_direction = turn(throw_direction, spin_turn_angle * length(spin_step_delays))
-	user.setDir(release_direction)
-	addtimer(CALLBACK(src, PROC_REF(follow_through), user, release_direction, throw_direction), follow_through_delay) // momentum spins the thrower
+	addtimer(CALLBACK(src, PROC_REF(follow_through), user, user.dir, aim_facing), follow_through_delay) // momentum spins the thrower
 	user.visible_message(
 		span_danger("[user] lets [src] fly!"),
 		span_danger("You let [src] fly!"),
 	)
 	playsound(user, 'sound/items/weapons/throwhard.ogg', 50, TRUE)
-	user.set_dizzy_if_lower(spin_dizziness)
-	user.log_message("spun up and threw [src] [dir2text(throw_direction)]", LOG_ATTACK)
+	user.set_dizzy_if_lower(built_dizziness)
+	user.log_message("spun up and threw [src] toward [AREACOORD(aim_turf)]", LOG_ATTACK)
 	spun_throw_in_flight = TRUE
 	throwforce_before_spin = throwforce
 	throwforce = spun_throwforce
-	var/turf/throw_target = get_ranged_target_turf(user, throw_direction, spun_throw_range)
+	var/turf/throw_target
+	if(standing_on_mark(user, aim_turf))
+		throw_target = get_ranged_target_turf(user, aim_facing, spun_throw_range)
+	else
+		throw_target = get_ranged_target_turf_direct(user, aim_turf, spun_throw_range) // full range along the aim, the click only sets the angle
 	if(!throw_at(throw_target, spun_throw_range, throw_speed, user, spin = TRUE, callback = CALLBACK(src, PROC_REF(end_spun_throw))))
 		end_spun_throw()
 
@@ -294,16 +325,28 @@
 		end_spun_throw()
 	return ..()
 
-/datum/action/item_action/hammer_throw
+/datum/action/cooldown/hammer_throw
 	name = "Hammer Throw"
-	desc = "Spin up with both hands and let the hammer fly. Telescreens hate this one trick."
-	check_flags = parent_type::check_flags | AB_CHECK_IMMOBILE
+	desc = "Pick a spot, spin up with both hands and let the hammer fly. Telescreens hate this one trick."
+	check_flags = /datum/action/item_action::check_flags | AB_CHECK_IMMOBILE
+	transparent_when_unavailable = TRUE
+	button_icon_state = null
+	click_to_activate = TRUE
+	ranged_mousepointer = 'icons/effects/mouse_pointers/throw_target.dmi'
 
-/datum/action/item_action/hammer_throw/New(Target)
+/datum/action/cooldown/hammer_throw/New(Target, original = TRUE)
 	. = ..()
-	RegisterSignals(target, list(SIGNAL_ADDTRAIT(TRAIT_WIELDED), SIGNAL_REMOVETRAIT(TRAIT_WIELDED)), PROC_REF(update_status_on_signal))
+	AddComponent(/datum/component/action_item_overlay, target)
+	RegisterSignal(target, SIGNAL_ADDTRAIT(TRAIT_WIELDED), PROC_REF(update_status_on_signal))
+	RegisterSignal(target, SIGNAL_REMOVETRAIT(TRAIT_WIELDED), PROC_REF(on_unwield))
 
-/datum/action/item_action/hammer_throw/IsAvailable(feedback = FALSE)
+/datum/action/cooldown/hammer_throw/proc/on_unwield(datum/source)
+	SIGNAL_HANDLER
+	if(owner && owner.click_intercept == src) // one hand off drops the aim too
+		unset_click_ability(owner, refund_cooldown = FALSE)
+	build_all_button_icons(UPDATE_BUTTON_STATUS)
+
+/datum/action/cooldown/hammer_throw/IsAvailable(feedback = FALSE)
 	. = ..()
 	if(!.)
 		return FALSE
@@ -311,12 +354,20 @@
 		if(feedback)
 			owner.balloon_alert(owner, "not dual-wielded!")
 		return FALSE
+	var/obj/item/sledgehammer/hammer = target
+	if(hammer.spin_facing)
+		if(feedback)
+			owner.balloon_alert(owner, "already spinning!")
+		return FALSE
 	return TRUE
 
-/datum/action/item_action/hammer_throw/do_effect(trigger_flags)
+/datum/action/cooldown/hammer_throw/Activate(atom/aimed_at)
 	var/obj/item/sledgehammer/hammer = target
 	if(HAS_TRAIT(owner, TRAIT_PACIFISM) || HAS_TRAIT(owner, TRAIT_NO_THROWING) || HAS_TRAIT(hammer, TRAIT_NODROP))
 		owner.balloon_alert(owner, "can't throw!")
 		return FALSE
-	INVOKE_ASYNC(hammer, TYPE_PROC_REF(/obj/item/sledgehammer, wind_up_throw), owner)
+	var/turf/aim_turf = get_turf(aimed_at)
+	if(isnull(aim_turf) || aim_turf.z != owner.z || hammer.standing_on_mark(owner, aim_turf))
+		return FALSE
+	INVOKE_ASYNC(hammer, TYPE_PROC_REF(/obj/item/sledgehammer, wind_up_throw), owner, aim_turf)
 	return TRUE
