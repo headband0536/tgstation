@@ -177,7 +177,7 @@
 	if(spin_facing)
 		return
 	var/throw_direction = user.dir
-	var/spin_turn_angle = IS_RIGHT_INDEX(user.get_held_index_of_item(src)) ? 90 : -90 // striker leads the spin
+	var/spin_turn_angle = IS_RIGHT_INDEX(user.get_held_index_of_item(src)) ? -90 : 90 // hammer trails, body drags it around
 	spin_facing = throw_direction
 	RegisterSignal(user, COMSIG_ATOM_PRE_DIR_CHANGE, PROC_REF(hold_spin_facing)) // so player can't 'break' spin 'anim'
 	user.visible_message(
