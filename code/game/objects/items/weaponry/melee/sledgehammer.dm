@@ -332,7 +332,7 @@
 	transparent_when_unavailable = TRUE
 	button_icon_state = null
 	click_to_activate = TRUE
-	ranged_mousepointer = 'icons/effects/mouse_pointers/throw_target.dmi'
+	ranged_mousepointer = 'icons/effects/mouse_pointers/cult_target.dmi'
 
 /datum/action/cooldown/hammer_throw/New(Target, original = TRUE)
 	. = ..()
