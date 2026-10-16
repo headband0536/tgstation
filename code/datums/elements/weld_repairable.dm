@@ -40,6 +40,9 @@
 	if(!needs_repair(machine))
 		machine.balloon_alert(user, "it doesn't need repairs!")
 		return ITEM_INTERACT_BLOCKING
+	if(!tool.tool_start_check(user, amount = 0)) // use_tool skips this with a delay, off welder would hiss and fail
+		machine.balloon_alert(user, "turn it on first!")
+		return ITEM_INTERACT_BLOCKING
 	INVOKE_ASYNC(src, PROC_REF(repair), machine, user, tool)
 	return ITEM_INTERACT_SUCCESS
 
