@@ -268,7 +268,7 @@
 	for(var/obj/machinery/wall_screen as anything in typecache_filter_list(range(1, src), smashable_screen_types))
 		if(get_turf_pixel(wall_screen) == hit_turf) // atom_mounted misses supply and brig displays, they're held up by pixel offsets
 			smash_screen(wall_screen)
-			wall_screen.hitby(src, skipcatch = TRUE, hitpush = FALSE, throwingdatum = throwingdatum)
+			wall_screen.hitby(src, hitpush = FALSE, throwingdatum = throwingdatum)
 
 /obj/item/sledgehammer/proc/push_catcher(mob/living/catcher, datum/thrownthing/throwingdatum)
 	var/turf/catcher_turf = get_turf(catcher)
